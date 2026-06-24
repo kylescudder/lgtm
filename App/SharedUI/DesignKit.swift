@@ -90,6 +90,7 @@ struct RemoteImage: View {
     var alt: String = ""
     @State private var image: CGImage?
     @State private var failed = false
+    @State private var showFull = false
 
     var body: some View {
         Group {
@@ -97,6 +98,9 @@ struct RemoteImage: View {
                 Image(decorative: image, scale: 1)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
+                    .contentShape(Rectangle())
+                    .onTapGesture { showFull = true }
+                    .help("Click to view full size")
             } else if failed {
                 Label(alt.isEmpty ? "image" : alt, systemImage: "photo")
                     .font(.caption).foregroundStyle(.secondary)
@@ -110,6 +114,52 @@ struct RemoteImage: View {
             if let loaded = await AvatarLoader.shared.image(for: url) { image = loaded }
             else { failed = true }
         }
+        .sheet(isPresented: $showFull) {
+            if let image { ImagePreview(image: image, alt: alt) }
+        }
+    }
+}
+
+/// A zoomable, dismissible full-size image preview presented as a sheet.
+/// Pinch (or trackpad) to zoom, double-tap to reset, Done/Esc to close.
+private struct ImagePreview: View {
+    let image: CGImage
+    var alt: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var scale: CGFloat = 1
+    @GestureState private var pinch: CGFloat = 1
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(alt.isEmpty ? "Image" : alt)
+                    .font(.headline).lineLimit(1).truncationMode(.middle)
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            .padding(12)
+
+            Divider()
+
+            ScrollView([.horizontal, .vertical]) {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .scaleEffect(scale * pinch)
+                    .padding(16)
+                    .gesture(
+                        MagnificationGesture()
+                            .updating($pinch) { value, state, _ in state = value }
+                            .onEnded { value in scale = min(max(scale * value, 1), 6) }
+                    )
+                    .onTapGesture(count: 2) {
+                        withAnimation(.spring(response: 0.3)) { scale = scale > 1 ? 1 : 2.5 }
+                    }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black.opacity(0.92))
+        }
+        .frame(minWidth: 680, minHeight: 520)
     }
 }
 

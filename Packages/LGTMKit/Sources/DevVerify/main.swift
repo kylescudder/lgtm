@@ -255,6 +255,17 @@ do {
     checks.expect(url.contains("path=/src/App.swift") || url.contains("path=/src/App.swift".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""), "path query present (got \(url))")
 }
 
+// PR commits decode + path.
+do {
+    let responder = Responder()
+    responder.enqueue(StubResponse(json: #"{ "count": 1, "value": [ { "commitId": "abcdef1234567890", "comment": "Fix things\nmore detail", "author": { "name": "Kyle", "date": "2026-06-20T09:15:00Z" } } ] }"#))
+    let client = makeClient(responder)
+    let commits = try await client.pullRequestCommits(project: "MyProject", repositoryId: "repo", pullRequestId: 42)
+    checks.expect(commits.first?.shortId == "abcdef12", "commit shortId")
+    checks.expect(commits.first?.summary == "Fix things", "commit summary is first line")
+    checks.expect((responder.last?.0.url?.absoluteString ?? "").contains("/pullrequests/42/commits"), "commits path")
+}
+
 checks.finish()
 
 // Local decoder mirroring LGTMKit's internal JSONCoding (which is not public).

@@ -23,6 +23,11 @@ final class PRDetailViewModel: ObservableObject {
     /// Builds a diff view model for a changed file, resolving the old side to the
     /// PR target branch and the new side to the PR source commit (falling back to
     /// the source branch when no merge commit is available).
+    /// Builds the view model for the (separate) commits screen.
+    func makeCommitsModel() -> CommitsViewModel {
+        CommitsViewModel(services: services, project: project, repositoryId: repositoryId, pullRequestId: prId)
+    }
+
     func makeDiffModel(for change: ChangeEntry) -> DiffViewModel {
         let oldVersion = pullRequest.targetBranch
         let oldType: GitVersionType = .branch

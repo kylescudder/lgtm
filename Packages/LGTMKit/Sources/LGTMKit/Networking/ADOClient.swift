@@ -171,6 +171,18 @@ public struct ADOClient: Sendable {
         return item.content ?? ""
     }
 
+    /// The commits on a pull request, most recent first.
+    public func pullRequestCommits(
+        project: String,
+        repositoryId: String,
+        pullRequestId: Int
+    ) async throws -> [GitCommit] {
+        let list: ADOList<GitCommit> = try await get(
+            path: gitPRPath(project, repositoryId, pullRequestId) + "/commits"
+        )
+        return list.value
+    }
+
     // MARK: - Pull request writes
 
     /// Casts (or updates) the signed-in user's vote on a pull request.

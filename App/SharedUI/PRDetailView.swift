@@ -20,6 +20,7 @@ struct PRDetailView: View {
                 }
                 reviewersCard
                 if !model.changedFiles.isEmpty { changedFilesCard }
+                commitsLink
                 discussionCard
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -159,6 +160,23 @@ struct PRDetailView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Commits (separate screen)
+
+    private var commitsLink: some View {
+        NavigationLink {
+            CommitsView(model: model.makeCommitsModel())
+        } label: {
+            Card {
+                HStack {
+                    SectionLabel(title: "Commits", systemImage: "smallcircle.filled.circle")
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Changed files

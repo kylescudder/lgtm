@@ -82,6 +82,37 @@ struct Avatar: View {
     }
 }
 
+/// An authenticated, cached remote image (e.g. a PR description attachment).
+/// Reuses `AvatarLoader` (which sends the ADO bearer token and caches), so the
+/// image downloads at most once. Falls back to a labelled placeholder.
+struct RemoteImage: View {
+    let url: URL?
+    var alt: String = ""
+    @State private var image: CGImage?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else if failed {
+                Label(alt.isEmpty ? "image" : alt, systemImage: "photo")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                ProgressView().controlSize(.small)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .task(id: url) {
+            guard let url else { failed = true; return }
+            if let loaded = await AvatarLoader.shared.image(for: url) { image = loaded }
+            else { failed = true }
+        }
+    }
+}
+
 // MARK: - Badges
 
 /// A coloured pill for a reviewer's vote.
@@ -168,6 +199,13 @@ struct MarkdownText: View {
             }
         case .paragraph(let s):
             inline(s)
+        case .image(let alt, let urlString):
+            RemoteImage(url: URL(string: urlString), alt: alt)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxHeight: 360)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
+                .padding(.vertical, 2)
         case .blank:
             Color.clear.frame(height: 3)
         }
@@ -184,7 +222,7 @@ struct MarkdownText: View {
     }
 
     private enum Block {
-        case heading(Int, String), bullet(String), task(Bool, String), paragraph(String), blank
+        case heading(Int, String), bullet(String), task(Bool, String), paragraph(String), image(String, String), blank
     }
 
     private var blocks: [Block] {
@@ -197,6 +235,12 @@ struct MarkdownText: View {
             if line.hasPrefix("- [ ] ") { return .task(false, String(line.dropFirst(6))) }
             if line.lowercased().hasPrefix("- [x] ") { return .task(true, String(line.dropFirst(6))) }
             if line.hasPrefix("- ") || line.hasPrefix("* ") { return .bullet(String(line.dropFirst(2))) }
+            // A line that is just a Markdown image: ![alt](url)
+            if line.hasPrefix("!["), let sep = line.range(of: "]("), line.hasSuffix(")") {
+                let alt = String(line[line.index(line.startIndex, offsetBy: 2)..<sep.lowerBound])
+                let url = String(line[sep.upperBound..<line.index(before: line.endIndex)])
+                return .image(alt, url)
+            }
             return .paragraph(line)
         }
     }

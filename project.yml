@@ -14,6 +14,9 @@ settings:
     # errors against the MSAL (Obj-C) dependency. The core package stays Swift 6.
     SWIFT_VERSION: "5.0"
     CODE_SIGN_STYLE: Automatic
+    # Apple Development team — pinned so `xcodegen generate` never resets Signing
+    # to "None". Change this to your own Team ID if you build under a different account.
+    DEVELOPMENT_TEAM: "2782NRY782"
     PRODUCT_BUNDLE_IDENTIFIER: co.uk.kylescudder.lgtm
     # User-facing app name (shown in the sign-in consent prompt, Dock, etc.).
     PRODUCT_NAME: lgtm

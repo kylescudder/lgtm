@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Push Notifications (aps-environment) is the one remaining capability to
+         add in Xcode → Signing & Capabilities once APNs is set up in Phase 0. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- Required by MSAL for its token cache. The group is prefixed with the
+         team id at runtime, matching the keychainSharingGroup MSAL is configured
+         with. Needs a Development Team selected for signing to provision it. -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)com.microsoft.identity.universalstorage</string>
+    </array>
+</dict>
+</plist>

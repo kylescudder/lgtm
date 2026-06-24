@@ -1,0 +1,67 @@
+name: lgtm
+options:
+  bundleIdPrefix: co.uk.kylescudder
+  deploymentTarget:
+    iOS: "16.0"
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Swift 5 language mode for the app targets to avoid strict-concurrency build
+    # errors against the MSAL (Obj-C) dependency. The core package stays Swift 6.
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    PRODUCT_BUNDLE_IDENTIFIER: co.uk.kylescudder.lgtm
+    # User-facing app name (shown in the sign-in consent prompt, Dock, etc.).
+    PRODUCT_NAME: lgtm
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+packages:
+  LGTMKit:
+    path: Packages/LGTMKit
+  MSAL:
+    url: https://github.com/AzureAD/microsoft-authentication-library-for-objc
+    from: "2.13.0"
+
+targets:
+  lgtm-iOS:
+    type: application
+    platform: iOS
+    sources:
+      - App/SharedUI
+      - App/Auth
+      - App/Shared
+      - App/iOS
+    settings:
+      base:
+        INFOPLIST_FILE: App/iOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/iOS/LGTM.entitlements
+        ENABLE_PREVIEWS: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - package: LGTMKit
+        product: LGTMKit
+      - package: MSAL
+        product: MSAL
+
+  lgtm-macOS:
+    type: application
+    platform: macOS
+    sources:
+      - App/SharedUI
+      - App/Auth
+      - App/Shared
+      - App/macOS
+    settings:
+      base:
+        INFOPLIST_FILE: App/macOS/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/macOS/LGTM.entitlements
+        ENABLE_PREVIEWS: YES
+    dependencies:
+      - package: LGTMKit
+        product: LGTMKit
+      - package: MSAL
+        product: MSAL

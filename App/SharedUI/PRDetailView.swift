@@ -98,12 +98,15 @@ struct PRDetailView: View {
             HStack(spacing: 8) {
                 Button { vote(.approved) } label: { Label("Approve", systemImage: "checkmark.circle.fill") }
                     .buttonStyle(.borderedProminent).tint(.green)
+                    .keyboardShortcut(.return, modifiers: .command)
                 Button { vote(.approvedWithSuggestions) } label: { Label("Suggestions", systemImage: "checkmark.circle") }
-                    .buttonStyle(.bordered)
+                    .voteEmphasis(model.myVote == .approvedWithSuggestions)
                 Button { vote(.waitingForAuthor) } label: { Label("Wait", systemImage: "clock") }
-                    .buttonStyle(.bordered).tint(.orange)
+                    .voteEmphasis(model.myVote == .waitingForAuthor, tint: .orange)
+                    .keyboardShortcut("l", modifiers: .command)
                 Button { vote(.rejected) } label: { Label("Reject", systemImage: "xmark.circle") }
-                    .buttonStyle(.bordered).tint(.red)
+                    .voteEmphasis(model.myVote == .rejected, tint: .red)
+                    .keyboardShortcut(.delete, modifiers: .command)
                 Spacer(minLength: 0)
                 Menu {
                     Button("Reset vote") { vote(.noVote) }
@@ -113,6 +116,13 @@ struct PRDetailView: View {
                     .menuStyle(.borderlessButton).fixedSize()
             }
             .controlSize(.large)
+
+            if let myVote = model.myVote {
+                HStack(spacing: 6) {
+                    Text("Your vote:").font(.caption).foregroundStyle(.secondary)
+                    VoteBadge(vote: myVote)
+                }
+            }
 
             HStack(spacing: 8) {
                 TextField("Add a comment…", text: $commentText, axis: .vertical)
@@ -244,5 +254,17 @@ struct PRDetailView: View {
         ProgressView()
             .padding(20)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private extension View {
+    /// Renders an action button filled (prominent) when it matches the user's
+    /// current vote, and bordered otherwise, so the active choice stands out.
+    @ViewBuilder func voteEmphasis(_ active: Bool, tint: Color? = nil) -> some View {
+        if active {
+            self.buttonStyle(.borderedProminent).tint(tint ?? .accentColor)
+        } else {
+            self.buttonStyle(.bordered).tint(tint ?? .accentColor)
+        }
     }
 }

@@ -10,11 +10,15 @@ final class PRDetailViewModel: ObservableObject {
     @Published var changedFiles: [ChangeEntry] = []
     @Published var isBusy = false
     @Published var errorMessage: String?
+    /// The signed-in user's current vote on this PR, if they are a reviewer.
+    @Published var myVote: Vote?
 
     private let services: AppServices
     let project: String
     private var repositoryId: String { pullRequest.repository?.id ?? "" }
     private var prId: Int { pullRequest.pullRequestId }
+    /// The Azure DevOps identity id for the signed-in user (resolved once).
+    private var resolvedUserId: String?
 
     /// Builds a diff view model for a changed file, resolving the old side to the
     /// PR target branch and the new side to the PR source commit (falling back to
@@ -60,15 +64,37 @@ final class PRDetailViewModel: ObservableObject {
             }
             if let full = try? await fullTask { pullRequest = full }
             threads = try await threadsTask
+            await refreshMyVote(ado)
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
+    /// Resolves the signed-in user's ADO identity id and matches it against the
+    /// PR reviewers to surface their current vote.
+    private func refreshMyVote(_ ado: ADOClient) async {
+        guard let me = await resolvedUserId(ado) else { return }
+        myVote = pullRequest.reviewers?.first { $0.id == me }?.vote
+    }
+
+    /// Azure DevOps filters by its own identity GUID, not the Entra `oid`.
+    /// Resolve it via `connectionData`, falling back to the `oid`. Cached after
+    /// the first successful resolution.
+    private func resolvedUserId(_ ado: ADOClient) async -> String? {
+        if let resolvedUserId { return resolvedUserId }
+        if let id = try? await ado.connectionData().authenticatedUser?.id {
+            resolvedUserId = id
+            return id
+        }
+        resolvedUserId = services.tokenProvider.currentUserObjectId
+        return resolvedUserId
+    }
+
     func vote(_ vote: Vote) async {
-        guard let ado = services.ado, let me = services.tokenProvider.currentUserObjectId else { return }
+        guard let ado = services.ado, let me = await resolvedUserId(ado) else { return }
         await run {
             _ = try await ado.vote(project: self.project, repositoryId: self.repositoryId, pullRequestId: self.prId, reviewerId: me, vote: vote)
+            self.myVote = vote == .noVote ? nil : vote
         }
     }
 

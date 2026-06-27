@@ -12,11 +12,19 @@ final class PRDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
     /// The signed-in user's current vote on this PR, if they are a reviewer.
     @Published var myVote: Vote?
+    /// `path@objectId` signatures of files the user has marked reviewed. Loaded
+    /// from / persisted to `ReviewStore`; tied to file content so a mark clears
+    /// when a later commit changes that file.
+    @Published private(set) var reviewedSignatures: Set<String> = []
 
     private let services: AppServices
     let project: String
     private var repositoryId: String { pullRequest.repository?.id ?? "" }
     private var prId: Int { pullRequest.pullRequestId }
+    /// Stable per-PR key for persisted review state.
+    private var reviewKey: String {
+        "pr/\(services.currentOrg?.accountName ?? "")/\(project)/\(repositoryId)/\(prId)"
+    }
     /// The Azure DevOps identity id for the signed-in user (resolved once).
     private var resolvedUserId: String?
 
@@ -54,9 +62,17 @@ final class PRDetailViewModel: ObservableObject {
         self.services = services
     }
 
+    /// Records (and persists) the set of reviewed-file signatures.
+    func setReviewed(_ signatures: Set<String>) {
+        reviewedSignatures = signatures
+        let key = reviewKey
+        Task { await services.reviews.set(signatures, for: key) }
+    }
+
     func load() async {
         guard let ado = services.ado else { return }
         isBusy = true; defer { isBusy = false }
+        reviewedSignatures = await services.reviews.signatures(for: reviewKey)
         do {
             // The list response carries an abbreviated description; fetch the full
             // PR by id so the description, reviewers and status are complete.

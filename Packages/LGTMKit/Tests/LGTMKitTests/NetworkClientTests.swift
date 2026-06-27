@@ -138,6 +138,22 @@ struct NetworkClientTests {
         #expect(responder.requestCount == 2)
     }
 
+    @Test func commitFetchesChangesWithChangeCount() async throws {
+        let responder = StubResponder()
+        responder.enqueue(StubResponse(json: #"{ "commitId": "feabc1234567890", "comment": "Tweak\nbody", "parents": ["parent000aaa"], "changes": [ { "changeType": "edit", "item": { "path": "/src/App.swift", "gitObjectType": "blob" } } ] }"#))
+        let client = makeClient(responder)
+
+        let commit = try await client.commit(project: "MyProject", repositoryId: "repo-guid", commitId: "feabc1234567890")
+
+        #expect(commit.parentId == "parent000aaa")
+        #expect(commit.changes?.first?.item?.path == "/src/App.swift")
+        let req = try #require(responder.last?.request)
+        #expect(req.httpMethod == "GET")
+        let url = try #require(req.url?.absoluteString)
+        #expect(url.contains("/myorg/MyProject/_apis/git/repositories/repo-guid/commits/feabc1234567890"))
+        #expect(url.contains("changeCount="))
+    }
+
     @Test func accountsUseVsspsHost() async throws {
         let responder = StubResponder()
         responder.enqueue(StubResponse(json: #"{ "count": 1, "value": [ { "accountId": "a1", "accountName": "myorg" } ] }"#))

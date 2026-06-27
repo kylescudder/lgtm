@@ -11,6 +11,9 @@ final class AppServices: ObservableObject {
     /// Disk-persisted per-org cache of projects + resolved user id, so the PR
     /// list can render instantly from cache while a background refresh runs.
     let cache = CacheStore()
+    /// Disk-persisted record of which files the user has marked reviewed, keyed
+    /// by PR/commit and tied to file content (see `ReviewStore`).
+    let reviews = ReviewStore()
 
     /// The currently selected organization, and a client bound to it.
     @Published private(set) var currentOrg: Account?

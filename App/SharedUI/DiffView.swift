@@ -3,7 +3,7 @@ import LGTMKit
 
 /// A single rendered line of a unified diff.
 private struct DiffLine: Identifiable {
-    enum Kind { case added, removed, unchanged }
+    enum Kind: Equatable { case added, removed, unchanged, collapsed }
     let id: Int
     let kind: Kind
     let text: String
@@ -97,7 +97,7 @@ final class DiffViewModel: ObservableObject {
             return
         }
 
-        state = .ready(Self.unifiedDiff(old: oldLines, new: newLines))
+        state = .ready(Self.collapse(Self.unifiedDiff(old: oldLines, new: newLines)))
     }
 
     /// A best-effort fetch: any error becomes empty content (deleted on one side,
@@ -163,6 +163,36 @@ final class DiffViewModel: ObservableObject {
         while j < m { append(.added, new[j]); j += 1 }
         return lines
     }
+
+    /// Collapses runs of unchanged lines that are far from any change into a
+    /// single "N unchanged lines" marker, keeping `context` lines of surrounding
+    /// context — so a one-line change in a huge file (e.g. a lockfile) doesn't
+    /// render the entire file. Returns `[]` when there are no changes at all.
+    fileprivate static func collapse(_ lines: [DiffLine], context: Int = 3) -> [DiffLine] {
+        let changed = lines.indices.filter { lines[$0].kind != .unchanged }
+        guard !changed.isEmpty else { return [] }
+
+        // Mark every line within `context` of a change as one to keep.
+        var keep = [Bool](repeating: false, count: lines.count)
+        for i in changed {
+            for j in max(0, i - context)...min(lines.count - 1, i + context) { keep[j] = true }
+        }
+
+        var result: [DiffLine] = []
+        var id = 0
+        var i = 0
+        while i < lines.count {
+            if keep[i] {
+                result.append(DiffLine(id: id, kind: lines[i].kind, text: lines[i].text)); id += 1
+                i += 1
+            } else {
+                var n = 0
+                while i < lines.count && !keep[i] { n += 1; i += 1 }
+                result.append(DiffLine(id: id, kind: .collapsed, text: "\(n) unchanged line\(n == 1 ? "" : "s")")); id += 1
+            }
+        }
+        return result
+    }
 }
 
 /// A monospaced unified diff for one changed file, with a loading and error state.
@@ -197,27 +227,51 @@ struct DiffView: View {
     }
 
     private func diffScroll(_ lines: [DiffLine]) -> some View {
-        ScrollView([.vertical, .horizontal]) {
-            VStack(alignment: .leading, spacing: 0) {
-                if lines.isEmpty {
-                    Text("No differences.").font(.callout).foregroundStyle(.secondary).padding()
-                }
-                ForEach(lines) { line in
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(prefix(line.kind))
-                            .frame(width: 12, alignment: .leading)
-                        Text(line.text.isEmpty ? " " : line.text)
-                            .fixedSize(horizontal: true, vertical: false)
+        GeometryReader { geo in
+            ScrollView([.vertical, .horizontal]) {
+                VStack(alignment: .leading, spacing: 0) {
+                    if lines.isEmpty {
+                        Text("No differences.").font(.callout).foregroundStyle(.secondary).padding()
                     }
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(color(line.kind))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(background(line.kind))
+                    ForEach(lines) { line in
+                        row(line)
+                    }
                 }
+                .padding(.vertical, 8)
+                // Fill at least the viewport, pinned top-left, so a short diff sits
+                // at the top rather than floating centred (a two-axis ScrollView
+                // centres content smaller than its viewport by default).
+                .frame(minWidth: geo.size.width, minHeight: geo.size.height, alignment: .topLeading)
             }
-            .padding(.vertical, 8)
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ line: DiffLine) -> some View {
+        if case .collapsed = line.kind {
+            HStack(spacing: 6) {
+                Image(systemName: "ellipsis")
+                Text(line.text)
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.primary.opacity(0.04))
+        } else {
+            HStack(alignment: .top, spacing: 8) {
+                Text(prefix(line.kind))
+                    .frame(width: 12, alignment: .leading)
+                Text(line.text.isEmpty ? " " : line.text)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .font(.system(.caption, design: .monospaced))
+            .foregroundStyle(color(line.kind))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(background(line.kind))
         }
     }
 
@@ -235,6 +289,7 @@ struct DiffView: View {
         case .added: return "+"
         case .removed: return "-"
         case .unchanged: return " "
+        case .collapsed: return ""
         }
     }
     private func color(_ kind: DiffLine.Kind) -> Color {
@@ -242,6 +297,7 @@ struct DiffView: View {
         case .added: return .green
         case .removed: return .red
         case .unchanged: return .secondary
+        case .collapsed: return .secondary
         }
     }
     private func background(_ kind: DiffLine.Kind) -> Color {
@@ -249,6 +305,7 @@ struct DiffView: View {
         case .added: return Color.green.opacity(0.10)
         case .removed: return Color.red.opacity(0.10)
         case .unchanged: return .clear
+        case .collapsed: return .clear
         }
     }
 }

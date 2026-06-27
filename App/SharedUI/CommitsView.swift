@@ -33,6 +33,11 @@ final class CommitsViewModel: ObservableObject {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
+
+    /// Builds the detail model for a tapped commit (its changed files + diffs).
+    func makeCommitDetailModel(for commit: GitCommit) -> CommitDetailViewModel {
+        CommitDetailViewModel(commit: commit, services: services, project: project, repositoryId: repositoryId)
+    }
 }
 
 /// A dedicated screen listing a pull request's commits (pushed via navigation,
@@ -51,14 +56,18 @@ struct CommitsView: View {
                     Text("No commits.").foregroundStyle(.secondary)
                 }
                 ForEach(model.commits) { commit in
-                    row(commit)
+                    NavigationLink {
+                        CommitDetailView(model: model.makeCommitDetailModel(for: commit))
+                    } label: {
+                        row(commit)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
             .padding(20)
         }
-        .navigationTitle("Commits")
         .overlay { if model.isLoading { ProgressView() } }
         .task { await model.load() }
         .alert("Something went wrong", isPresented: .constant(model.errorMessage != nil)) {
@@ -93,6 +102,9 @@ struct CommitsView: View {
                     }
                 }
                 Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .padding(.top, 2)
             }
         }
     }

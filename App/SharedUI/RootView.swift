@@ -6,11 +6,16 @@ struct RootView: View {
     @ObservedObject var session: AppSession
 
     var body: some View {
-        if let services = session.services {
-            SignedInRootView(services: services)
-        } else {
-            SignInView(session: session)
+        Group {
+            if let services = session.services {
+                SignedInRootView(services: services)
+            } else {
+                SignInView(session: session)
+            }
         }
+        // Restore a cached session silently on launch — skips the sign-in screen
+        // entirely for returning users when MSAL has a valid cached token.
+        .task { await session.resume() }
     }
 }
 

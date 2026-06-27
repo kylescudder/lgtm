@@ -141,23 +141,34 @@ private struct ImagePreview: View {
 
             Divider()
 
-            ScrollView([.horizontal, .vertical]) {
-                Image(decorative: image, scale: 1)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .scaleEffect(scale * pinch)
-                    .padding(16)
-                    .gesture(
-                        MagnificationGesture()
-                            .updating($pinch) { value, state, _ in state = value }
-                            .onEnded { value in scale = min(max(scale * value, 1), 6) }
-                    )
-                    .onTapGesture(count: 2) {
-                        withAnimation(.spring(response: 0.3)) { scale = scale > 1 ? 1 : 2.5 }
-                    }
+            GeometryReader { geo in
+                // Fit the image to the viewport at rest so a wide image can't
+                // overflow horizontally; the scroll content only grows past the
+                // viewport once zoomed in (scaleEffect alone doesn't resize the
+                // layout, so the ScrollView couldn't otherwise pan a zoomed image).
+                let zoom = scale * pinch
+                let fitWidth = max(geo.size.width - 32, 1)
+                let fitHeight = max(geo.size.height - 32, 1)
+                ScrollView([.horizontal, .vertical]) {
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: fitWidth, height: fitHeight)
+                        .scaleEffect(zoom)
+                        .frame(width: fitWidth * zoom, height: fitHeight * zoom)
+                        .padding(16)
+                        .gesture(
+                            MagnificationGesture()
+                                .updating($pinch) { value, state, _ in state = value }
+                                .onEnded { value in scale = min(max(scale * value, 1), 6) }
+                        )
+                        .onTapGesture(count: 2) {
+                            withAnimation(.spring(response: 0.3)) { scale = scale > 1 ? 1 : 2.5 }
+                        }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.92))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black.opacity(0.92))
         }
         .frame(minWidth: 680, minHeight: 520)
     }

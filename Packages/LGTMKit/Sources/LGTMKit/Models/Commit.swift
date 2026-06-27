@@ -13,6 +13,12 @@ public struct GitCommit: Codable, Sendable, Identifiable, Hashable {
     public let comment: String?
     public let author: GitUserDate?
     public let committer: GitUserDate?
+    /// Parent commit ids. Present on the single-commit "Get Commit" response, not
+    /// on the PR commits list. The first parent is the base to diff this commit against.
+    public let parents: [String]?
+    /// The files changed by this commit. Present when fetched with a `changeCount`
+    /// (see `ADOClient.commit`), otherwise `nil`.
+    public let changes: [ChangeEntry]?
 
     public var id: String { commitId }
     /// The abbreviated SHA shown in the UI.
@@ -21,4 +27,6 @@ public struct GitCommit: Codable, Sendable, Identifiable, Hashable {
     public var summary: String {
         (comment ?? "").split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
     }
+    /// The first parent — the commit to diff this one against. `nil` for a root commit.
+    public var parentId: String? { parents?.first }
 }

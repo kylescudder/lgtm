@@ -46,6 +46,19 @@ final class MSALTokenProvider: TokenProvider {
         account?.accountClaims?["oid"] as? String
     }
 
+    /// Whether a previously signed-in account is cached, so a silent, UI-free
+    /// session restore can be attempted at launch.
+    var hasCachedAccount: Bool { account != nil }
+
+    /// Silent, UI-free token acquisition for restoring a session at launch.
+    /// Returns `nil` when there is no cached account or the cached refresh token
+    /// can't be redeemed silently — the caller should then show interactive
+    /// sign-in. Unlike `token(for:)`, this never presents the web flow.
+    func tokenSilently(for scope: String) async -> String? {
+        guard let account else { return nil }
+        return try? await acquireSilent(scopes: [scope], account: account)
+    }
+
     func token(for scope: String) async throws -> String {
         let scopes = [scope]
         if let account, let token = try? await acquireSilent(scopes: scopes, account: account) {

@@ -183,6 +183,21 @@ public struct ADOClient: Sendable {
         return list.value
     }
 
+    /// Full detail for a single commit, including its parent ids and (when
+    /// `changeCount > 0`) the files it changed. Diff a file in this commit by
+    /// fetching its content at `parentId` (old) and `commitId` (new).
+    public func commit(
+        project: String,
+        repositoryId: String,
+        commitId: String,
+        changeCount: Int = 1000
+    ) async throws -> GitCommit {
+        try await get(
+            path: "/\(configuration.organization)/\(project)/_apis/git/repositories/\(repositoryId)/commits/\(commitId)",
+            query: [URLQueryItem(name: "changeCount", value: String(changeCount))]
+        )
+    }
+
     // MARK: - Pull request writes
 
     /// Casts (or updates) the signed-in user's vote on a pull request.

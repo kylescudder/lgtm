@@ -266,6 +266,21 @@ do {
     checks.expect((responder.last?.0.url?.absoluteString ?? "").contains("/pullrequests/42/commits"), "commits path")
 }
 
+// Single commit (Get Commit) decodes parents + changes; request carries changeCount.
+do {
+    let responder = Responder()
+    responder.enqueue(StubResponse(json: #"{ "commitId": "feabc1234567890", "comment": "Tweak\nbody", "parents": ["parent000aaa"], "changes": [ { "changeType": "edit", "item": { "path": "/src/App.swift", "gitObjectType": "blob", "objectId": "blob111" } }, { "changeType": "add", "item": { "path": "/src", "gitObjectType": "tree" } } ] }"#))
+    let client = makeClient(responder)
+    let commit = try await client.commit(project: "MyProject", repositoryId: "repo-guid", commitId: "feabc1234567890")
+    checks.expect(commit.parentId == "parent000aaa", "commit parent id decodes")
+    checks.expect(commit.changes?.count == 2, "commit changes decode")
+    checks.expect(commit.changes?.first?.item?.gitObjectType == "blob", "change item gitObjectType decodes")
+    checks.expect(commit.changes?.first?.item?.objectId == "blob111", "change item objectId decodes")
+    let url = responder.last?.0.url?.absoluteString ?? ""
+    checks.expect(url.contains("/myorg/MyProject/_apis/git/repositories/repo-guid/commits/feabc1234567890"), "commit path (got \(url))")
+    checks.expect(url.contains("changeCount=1000"), "changeCount query present (got \(url))")
+}
+
 checks.finish()
 
 // Local decoder mirroring LGTMKit's internal JSONCoding (which is not public).

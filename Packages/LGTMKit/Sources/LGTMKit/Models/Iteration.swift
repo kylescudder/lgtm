@@ -13,6 +13,14 @@ public struct Iteration: Codable, Sendable, Identifiable, Hashable {
 public struct ChangeItem: Codable, Sendable, Hashable {
     public let path: String?
     public let isFolder: Bool?
+    /// `"blob"` for a file, `"tree"` for a folder. Present on commit changes;
+    /// used to filter folders out of a commit's changed-file list.
+    public let gitObjectType: String?
+    /// The Git blob object id of this item's content. It changes whenever the
+    /// file's content changes, so it identifies *which version* of a file was
+    /// reviewed — letting a "reviewed" mark auto-clear when a later commit
+    /// touches that file while leaving untouched files marked.
+    public let objectId: String?
 }
 
 /// A single file change within a pull request iteration.

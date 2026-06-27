@@ -44,6 +44,28 @@ struct ModelDecodingTests {
         #expect(pr.repository?.project?.name == "MyProject")
     }
 
+    @Test func commitDecodesParentsAndChanges() throws {
+        let json = """
+        {
+          "commitId": "feabc1234567890",
+          "comment": "Tweak things\\nmore detail",
+          "parents": ["parent000aaa"],
+          "changes": [
+            { "changeType": "edit", "item": { "path": "/src/App.swift", "gitObjectType": "blob", "objectId": "blob111" } },
+            { "changeType": "add", "item": { "path": "/src", "gitObjectType": "tree" } }
+          ]
+        }
+        """
+        let commit = try decode(GitCommit.self, json)
+        #expect(commit.parentId == "parent000aaa")
+        #expect(commit.shortId == "feabc123")
+        #expect(commit.summary == "Tweak things")
+        #expect(commit.changes?.count == 2)
+        #expect(commit.changes?.first?.changeType == "edit")
+        #expect(commit.changes?.first?.item?.gitObjectType == "blob")
+        #expect(commit.changes?.first?.item?.objectId == "blob111")
+    }
+
     @Test func plainAndFractionalDatesBothParse() {
         #expect(JSONCoding.parseDate("2026-06-20T09:15:00Z") != nil)
         #expect(JSONCoding.parseDate("2026-06-20T09:15:00.123Z") != nil)

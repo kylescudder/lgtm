@@ -5,27 +5,37 @@ import LGTMKit
 struct PRDetailView: View {
     @StateObject private var model: PRDetailViewModel
     @State private var commentText = ""
+    @State private var tab: Tab = .details
+
+    /// The tabs shown beneath the pinned header.
+    private enum Tab: Hashable { case details, files, commits }
 
     init(model: PRDetailViewModel) {
         _model = StateObject(wrappedValue: model)
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                headerCard
-                actionCard
-                if let desc = model.pullRequest.description, !desc.isEmpty {
-                    Card { SectionLabel(title: "Description", systemImage: "text.alignleft"); MarkdownText(text: desc) }
-                }
-                reviewersCard
-                if !model.changedFiles.isEmpty { changedFilesCard }
-                commitsLink
-                discussionCard
+        VStack(spacing: 0) {
+            // Pinned: title + status and the vote/comment bar stay visible across tabs.
+            pinnedHeader
+            actionCard
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+
+            Picker("View", selection: $tab) {
+                Text("Details").tag(Tab.details)
+                Text("Changed files").tag(Tab.files)
+                Text("Commits").tag(Tab.commits)
             }
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity)
-            .padding(20)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+
+            Divider()
+
+            tabContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationTitle(Text(verbatim: "PR #\(model.pullRequest.pullRequestId)"))
         .task { await model.load() }
@@ -35,21 +45,71 @@ struct PRDetailView: View {
         } message: { Text(model.errorMessage ?? "") }
     }
 
+    // MARK: - Tab content
+
+    @ViewBuilder private var tabContent: some View {
+        switch tab {
+        case .details:
+            detailsTab
+        case .files:
+            FileDiffBrowser(
+                files: model.changedFiles,
+                isLoading: model.isBusy,
+                makeDiffModel: { model.makeDiffModel(for: $0) },
+                reviewedSignatures: Binding(get: { model.reviewedSignatures }, set: { model.setReviewed($0) })
+            ) {
+                Text("Changed files")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                Divider()
+            }
+        case .commits:
+            CommitsView(model: model.makeCommitsModel())
+        }
+    }
+
+    private var detailsTab: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                infoCard
+                if let desc = model.pullRequest.description, !desc.isEmpty {
+                    Card { SectionLabel(title: "Description", systemImage: "text.alignleft"); MarkdownText(text: desc) }
+                }
+                reviewersCard
+                discussionCard
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(20)
+        }
+    }
+
     // MARK: - Header
 
-    private var headerCard: some View {
-        Card(spacing: 12) {
+    /// Compact, always-visible header above the tabs: title + status.
+    private var pinnedHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text(model.pullRequest.title ?? "Untitled")
-                .font(.title2.weight(.semibold))
+                .font(.title3.weight(.semibold))
+                .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) { statusPills }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+    }
 
+    /// Branch flow + author — shown on the Details tab.
+    private var infoCard: some View {
+        Card(spacing: 12) {
             HStack(spacing: 6) {
                 branchPill(model.pullRequest.sourceBranch ?? "?", icon: "arrow.triangle.branch")
                 Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
                 branchPill(model.pullRequest.targetBranch ?? "?", icon: nil)
             }
-
-            HStack(spacing: 8) { statusPills }
 
             HStack(spacing: 8) {
                 Avatar(url: model.pullRequest.createdBy?.imageUrl, name: model.pullRequest.createdBy?.displayName)
@@ -159,73 +219,6 @@ struct PRDetailView: View {
                     VoteBadge(vote: reviewer.vote)
                 }
             }
-        }
-    }
-
-    // MARK: - Commits (separate screen)
-
-    private var commitsLink: some View {
-        NavigationLink {
-            CommitsView(model: model.makeCommitsModel())
-        } label: {
-            Card {
-                HStack {
-                    SectionLabel(title: "Commits", systemImage: "smallcircle.filled.circle")
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Changed files
-
-    private var changedFilesCard: some View {
-        Card {
-            SectionLabel(title: "Changed files", systemImage: "doc.on.doc", count: model.changedFiles.count)
-            ForEach(Array(model.changedFiles.enumerated()), id: \.offset) { _, change in
-                NavigationLink {
-                    DiffView(
-                        model: model.makeDiffModel(for: change),
-                        title: fileName(change.item?.path)
-                    )
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: fileIcon(change.changeType))
-                            .foregroundStyle(fileColor(change.changeType)).font(.caption)
-                        Text(change.item?.path ?? "—")
-                            .font(.system(.callout, design: .monospaced))
-                            .lineLimit(1).truncationMode(.middle)
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.caption2).foregroundStyle(.tertiary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func fileName(_ path: String?) -> String {
-        guard let path, !path.isEmpty else { return "Diff" }
-        return (path as NSString).lastPathComponent
-    }
-
-    private func fileIcon(_ type: String?) -> String {
-        switch type?.lowercased() {
-        case let t? where t.contains("add"): return "plus.circle.fill"
-        case let t? where t.contains("delete"): return "minus.circle.fill"
-        case let t? where t.contains("rename"): return "arrow.left.arrow.right.circle.fill"
-        default: return "pencil.circle.fill"
-        }
-    }
-    private func fileColor(_ type: String?) -> Color {
-        switch type?.lowercased() {
-        case let t? where t.contains("add"): return .green
-        case let t? where t.contains("delete"): return .red
-        default: return .orange
         }
     }
 

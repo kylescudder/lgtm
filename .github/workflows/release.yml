@@ -1,0 +1,97 @@
+name: Release
+
+# Build the macOS app and publish a GitHub Release whenever a vX.Y.Z tag is pushed.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    env:
+      # Write-scoped SSH deploy key for kylescudder/homebrew-tap, used to auto-bump
+      # the cask on release. Stored as the HOMEBREW_TAP_SSH_KEY repo secret.
+      HOMEBREW_TAP_SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app || sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Resolve version
+        id: ver
+        run: |
+          REF="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$REF" >> "$GITHUB_OUTPUT"
+          echo "version=${REF#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Build (Release, ad-hoc signed)
+        run: |
+          xcodebuild \
+            -scheme lgtm-macOS \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/dd \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package
+        id: pkg
+        run: |
+          APP="build/dd/Build/Products/Release/lgtm.app"
+          ZIP="lgtm-${{ steps.ver.outputs.version }}-macos.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Create / update release
+        run: |
+          gh release create "${{ steps.ver.outputs.tag }}" "${{ steps.pkg.outputs.zip }}" \
+            --title "LGTM ${{ steps.ver.outputs.version }}" \
+            --notes "Universal (arm64 + x86_64) macOS build.
+          SHA-256: \`${{ steps.pkg.outputs.sha256 }}\`
+
+          Install: \`brew install --cask kylescudder/tap/lgtm\`" \
+          || gh release upload "${{ steps.ver.outputs.tag }}" "${{ steps.pkg.outputs.zip }}" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Auto-bump the Homebrew cask (version + sha256) in kylescudder/homebrew-tap.
+      # Uses the write-scoped SSH deploy key in HOMEBREW_TAP_SSH_KEY; skipped if unset.
+      - name: Bump Homebrew cask
+        if: ${{ env.HOMEBREW_TAP_SSH_KEY != '' }}
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          SHA256: ${{ steps.pkg.outputs.sha256 }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$HOMEBREW_TAP_SSH_KEY" > ~/.ssh/tap_key
+          chmod 600 ~/.ssh/tap_key
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap_key -o StrictHostKeyChecking=accept-new"
+          git clone git@github.com:kylescudder/homebrew-tap.git tap
+          sed -i '' -E "s/version \".*\"/version \"${VERSION}\"/" tap/Casks/lgtm.rb
+          sed -i '' -E "s/sha256 \".*\"/sha256 \"${SHA256}\"/" tap/Casks/lgtm.rb
+          cd tap
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git commit -am "lgtm ${VERSION}" || { echo "no cask change"; exit 0; }
+          git push

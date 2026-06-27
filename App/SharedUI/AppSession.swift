@@ -16,6 +16,21 @@ final class AppSession: ObservableObject {
         self.factory = factory
     }
 
+    /// Attempts to restore a previous session at launch without any UI. Safe to
+    /// call on every appearance: if there is no cached account (or the token
+    /// can't be refreshed silently) it leaves the user on the sign-in screen
+    /// rather than popping the interactive Microsoft web flow.
+    func resume() async {
+        guard services == nil, !isSigningIn, AppConfiguration.isConfigured else { return }
+        isSigningIn = true
+        defer { isSigningIn = false }
+        guard let services = try? factory(), services.tokenProvider.hasCachedAccount else { return }
+        let scope = AppConfiguration.adoScopes.first ?? azureDevOpsDefaultScope
+        if await services.tokenProvider.tokenSilently(for: scope) != nil {
+            self.services = services
+        }
+    }
+
     func signIn() async {
         guard services == nil, !isSigningIn else { return }
         isSigningIn = true
